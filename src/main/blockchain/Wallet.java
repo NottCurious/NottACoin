@@ -1,12 +1,23 @@
 package main.blockchain;
 
+import main.NottACoin;
+import main.transaction.Transaction;
+import main.transaction.TransactionInput;
+import main.transaction.TransactionOutput;
+
 import javax.net.ssl.KeyStoreBuilderParameters;
 import java.security.*;
 import java.security.spec.ECGenParameterSpec;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
 
 public class Wallet {
     public PrivateKey privateKey;
     public PublicKey publicKey;
+
+    public HashMap<String, TransactionOutput> UTXOs = new HashMap<String, TransactionOutput>();
 
     public Wallet() {
         generateKeyPair();
@@ -27,5 +38,46 @@ public class Wallet {
         catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public float getBalance() {
+        float total = 0;
+
+        for(Map.Entry<String, TransactionOutput> item : NottACoin.UTXOs.entrySet()) {
+            TransactionOutput UTXO = item.getValue();
+
+            if(UTXO.isMine(publicKey)) {
+                UTXOs.put(UTXO.id, UTXO);
+                total += UTXO.value;
+            }
+        }
+
+        return total;
+    }
+
+    public Transaction sendFunds(PublicKey _receipient, float value) {
+        if(getBalance() < value) {
+            System.out.println("-> Not Enough Funds to Commit Transaction. Denied");
+            return null;
+        }
+
+        ArrayList<TransactionInput> inputs = new ArrayList<TransactionInput>();
+
+        float total = 0;
+        for(Map.Entry<String, TransactionOutput> item : UTXOs.entrySet()) {
+            TransactionOutput UTXO = item.getValue();
+            total += UTXO.value;
+            inputs.add(new TransactionInput(UTXO.id));
+            if(total > value) break;
+        }
+
+        Transaction newTransaction = new Transaction(publicKey, _receipient, value, inputs);
+        newTransaction.generateSignature(privateKey);
+
+        for(TransactionInput input : inputs) {
+            UTXOs.remove(input.transactionOutputId);
+        }
+
+        return newTransaction;
     }
 }
